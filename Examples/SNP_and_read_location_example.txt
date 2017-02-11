@@ -1,0 +1,3 @@
+/pathway/to/kSNP_SNPs.txt	/pathway/to/Isolate_1/trimmed_read_file_2	/pathway/to/isolate_1/trimmed_read_file_2	Isolate_1_read_count.txt
+/pathway/to/kSNP_SNPs.txt	/pathway/to/Isolate_2/trimmed_read_file_2	/pathway/to/isolate_2/trimmed_read_file_2	Isolate_2_read_count.txt
+/pathway/to/kSNP_SNPs.txt	/pathway/to/Isolate_3/trimmed_read_file_2	/pathway/to/isolate_3/trimmed_read_file_2	Isolate_3_read_count.txt

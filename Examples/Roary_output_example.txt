@@ -1,0 +1,3 @@
+Isolate_1	Isolate_1_02123	Isolate_1_01456	Isolate_1_01556	
+Isolate_2	Isolate_2_02145	XXXXX	Isolate_2_05612	
+Isolate_3	Isolate_3_10625	XXXXX	XXXXX	
