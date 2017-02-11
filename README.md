@@ -115,5 +115,3 @@ From the terminal the file can be run as:
 ```
 perl Protein_differences_to_binary.pl
 ```
-# Scripts-for-genomic-analyses
-# Scripts-for-genomic-analyses
