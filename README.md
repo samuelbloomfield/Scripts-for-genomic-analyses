@@ -46,7 +46,7 @@ perl Assembly_scipt.pl -NZGL Project_name -kmerStart Starting_kmer_value -kmerEn
 
 The Read_searcher_python.py script was used to count the number of reads that contain SNPs identified in kSNP.
 The Read_searcher_python.py script requires a file containing all the kmer variants that kSNP identified. I have included 'kSNP_SNPs_example.txt' as an example of what the kmer variant file should look like.
-The Read_searcher_python.py script also requires a tab-deliminated file with the location of the kmer variant file in the first column, the location of the first processed read files in the second column, the location of the second processed read files in the third column and the names of the output files for the isolate in the fourth column. I have included 'SNP_and_read_example.txt' as an examble of what this file should look like.
+The Read_searcher_python.py script also requires a tab-delaminated file with the location of the kmer variant file in the first column, the location of the first processed read files in the second column, the location of the second processed read files in the third column and the names of the output files for the isolate in the fourth column. I have included 'SNP_and_read_example.txt' as an examble of what this file should look like.
 The script will return a file for each isolate that contains the number of reads that contain each SNP variant.
 From the terminal the file can be run as:
 
@@ -56,14 +56,14 @@ python Read_searcher_python.py SNP_and_read_file.txt
 
 ### SNP codon and position
 
-The SNP_location.pl script was used to determine the location and codons that SNPs were associated with.
-The SNP_location.pl script will need to be re-written to include the location of the working directory, the .gff file name, the location and direction of SNPs, and the sequence variants of the SNPs.
-The working directory should contain a copy of the .gff file used.
-The script will return the number of genes the SNP is located in, the codon position, the codon variants, the translated codons, and the SNP type in the "Isolate.gff_SNP_locations" file.
+The SNP_location.pl script was used to determine the type of SNPs (e.g. synonymous/non-synonymous, intergenic/found within one or more genes, and the codon position within a gene that it is associated with) based on their location within a reference genome.
+The SNP_location.pl requires two arguments: the location of the reference genome in .gff format, and the location of a text-delaminated file containing the SNP information.
+The text-delaminated should contain: the position of the SNP on the reference file, whether the SNPs are forward (F) or reverse compliment (R), and the variations of the SNPs. An example of the text-delaminated file can be found in the example directory. Most SNP-identification programs that use a reference (e.g. Snippy) will give all the SNPs as forward, but for programmes that identify SNPs via kmers (e.g. kSNP), the SNPs may be reverse complement.
+The script will return: the number of genes the SNP is located within, the codon position, and whether the SNP is synonymous or non-synonymous in the "*_SNP_types.txt" file; a summary of the number of synonymous and non-synonymous SNPs, and the number of SNPs that are intergenic, or associated with one or multiple genes in the "*_SNP_summary.txt" file; and for each gene that contains a SNP, the number of SNPs associated with that gene in the "*_gene_SNP_counts.txt" file.
 From the terminal the file can be run as:
 
 ```
-perl SNP_location.pl
+perl SNP_location.pl -GFF Reference.gff -SNP Text_delaminated_SNP_file.txt
 ```
 
 
