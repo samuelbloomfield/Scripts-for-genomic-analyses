@@ -1,5 +1,6 @@
 ###
 #	SNP_location.pl
+#	Version 2.0
 #	Script to locate the position and types of SNPs in a .gff file
 #	Author: Samuel Bloomfield
 ###
@@ -7,47 +8,41 @@
 
 use warnings;
 use strict;
+use Getopt::Long;
+use List::MoreUtils qw(uniq);
 use Bio::Seq;
 use Bio::SeqIO;
 use Bio::Tools::CodonTable;
 
-#Location of working directory
-my $wkdir="/working/directory/location/";
+my $GFF;
+my $SNP;
 
-#.gff file name
-my $input_gff="Isolate.gff";
+GetOptions ('GFF:s'		=> \$GFF,
+			'SNP:s'	=> \$SNP);
 
-#Location of SNPs within genome
-my @locations = (1001, 1234, 5002);
 
-#Direction of SNPs
-#Note that for the snippy all the directions will be forward (F), whilst for kSNP they can be forward(F) or reverse (R)
-my @position = ("F",	"F",	"R");
 
-#First SNP variant
-my @SNP_variant_1 =("G",	"C",	"A");
 
-#Second SNP variant
-my @SNP_variant_2 =("T",	"T",	"G");
+#Creates output files from GFF file name or uses 'SNP' as the base name
+my $name;
 
-my @codon_variant_1=();
-my @codon_variant_2=();
+if ($GFF=~m/(.*?)\.gff/) {
+    $name = $1;
+} else {
+    $name = 'SNP';
+}    
 
-my $file1=($wkdir . $input_gff);
-my $output=($file1 . '_SNP_locations');
+my $output = ($name . '_SNP_types.txt');
+my $gene_output = ($name . '_gene_SNP_counts.txt');
+my $SNP_summary = ($name . '_SNP_summary.txt');
 
-my $line_no;
-
-my $loc;
 my $line;
 my $first;
 my $second;
 my $orientation;
-my $counter;
 my $protein_counter;
 
 my @count = ();
-my @loc_found = ();
 my @codon=();
 my @codon_sequence=();
 my @lines = ();
@@ -59,12 +54,10 @@ my $position;
 
 my $line_2;
 my $size;
-
+my @codon_variant=();
 my @sequences = ();
 my $sequence;
 
-my $temp_sequence_1;
-my $temp_sequence_2;
 
 my @DNA_sequences=();
 my $temp_DNA;
@@ -72,14 +65,21 @@ my $temp_DNA;
 my $temp1;
 my $temp2;
 
-open FILE, $file1 or die "FILE $file1 NOT FOUND - $!\n";
+my $intergenic = 0;
+my $single_gene = 0;
+my $multiple_gene = 0;
 
-#Reads sequence data from a .gff file
+my $synonymous = 0;
+my $non_synonymous = 0;
+
+open FILE, $GFF or die "GFF $GFF NOT FOUND - $!\n";
+
+#Reads sequence contained within .gff file and compiles into a single string
 
 foreach $_ (<FILE>) {
 	$line_2 = $_;
 	if ($line_2=~m/sequence-region\s(.*?)\s\d+\s(\d+)\n/) { 
-		print "$1\t$2";
+		print "$1\t$2\n";
 		$size = $2;
 	} elsif ($line_2=~/ |\t|#|>/) {
 	} elsif ($line_2=~/([GATCN]+)/) {
@@ -92,32 +92,75 @@ close FILE;
 
 $sequence = join("", @sequences);
 
-$counter=0;
+my $SNP_line;
 
-foreach (@locations) {
-	$loc = $_;
+my $loc;
+my @locations=();
+my $pos;
+my $base;
+my @bases;
+my @SNP_info;
+my $bases_raw;
+
+my @codon_variant_line;
+my @codon_line;
+
+my @protein_variant;
+
+my $amino_acid;
+my $aa_count;
+my $aa_type;
+my @SNP_type_line;
+my @SNP_type=();
+
+my $bio_sequence;
+my $protein_sequence;
+my $codon_var;
+my $base_length;
+
+my $counter = 0;
+
+#Reads information provided on the SNPs in the SNP file
+
+open FILE2, $SNP or die "FILE $SNP NOT FOUND - $!\n";
+
+foreach $_ (<FILE2>) {
+	$SNP_line = $_;
+	
+
+	@SNP_info = split (/\s/, $SNP_line);
+	
+	$loc = $SNP_info[0];
+	$pos = $SNP_info[1];
+	
+    push @locations, $loc;
+	
+	$base_length = scalar @SNP_info - 2;
+	
+	@bases= splice (@SNP_info, 2, $base_length);
+	
+	@bases = grep { $_ ne '' } @bases;
+
 	$protein_counter=0;
 	
-	$line_no = 0;
 	
-	open FILE1, $file1 or die "FILE $file1 NOT FOUND - $!\n";
+	@codon_line=();
+	@SNP_type_line=();
+	
+	open FILE1, $GFF or die "FILE $GFF NOT FOUND - $!\n";
 	foreach $_ (<FILE1>) {
 		$line = $_;
-		
-		$line_no++;
+
 		
 		#Identifies what genes, if any, the SNP is associated with
 
-		if($line=~m/CDS\t(\d+)\t(\d+)\t\.\t([+-])\t\d+\tID/) {
+		if($line=~m/CDS\t(\d+)\t(\d+)\t\.\t([+-])\t/) {
 			$first = $1;
 			$second = $2;
 			$orientation = $3;
 			
 			if($loc>($first-1) and $loc<($second+1)){
-				push @loc_found, $loc;
 				$protein_counter++;
-				
-				push @lines, $line_no;
 				
 				if ($orientation eq '+') {
 					$temp_DNA = substr($sequence, ($first -1), ($second - $first + 1));
@@ -129,128 +172,155 @@ foreach (@locations) {
 					push @DNA_sequences, $temp_DNA;
 				}
 
+                @protein_variant=();
+                @codon_variant_line=();
+                
 				#Identifed the codon position of the SNP and extracts the codon
 				
-				if($orientation eq '+') {
-					$temp_sequence_1 = $SNP_variant_1[$counter];
-					$temp_sequence_2 = $SNP_variant_2[$counter];
-					if($position[$counter] eq "R") {
-						$temp_sequence_1 =~ tr/ACGTN/TGCAN/;
-						$temp_sequence_2 =~ tr/ACGTN/TGCAN/;
+				foreach(@bases){
+					$base = $_;
+					
+					
+				
+					if($orientation eq '+') {
+						if($pos eq "R") {
+							$base =~ tr/ACGTN/TGCAN/;
+						}
+						
+						$x = $loc - $first;
+						$y = 0;
+						$z = ($second - $first);
+						$position = (($x%3)+1);
+						push @codon_line, $position;
+						if($position==1){
+							push @codon_variant_line, ($base . (substr($sequence, ($loc), 2)));
+						} elsif ($position==2){
+							push @codon_variant_line, ((substr($sequence, ($loc -2), 1)) . $base . (substr($sequence, ($loc), 1)));
+						} elsif ($position==3){
+							push @codon_variant_line, ((substr($sequence, ($loc -3), 2)) . $base);
+						}
+					} elsif($orientation eq '-') {
+						$base =~ tr/ACGTN/TGCAN/;
+						if($pos eq "R") {
+							$base =~ tr/ACGTN/TGCAN/;
+						}
+
+						$x = $second - $loc;
+						$y = $second - $first;
+						$z = 0;
+						$position = (($x%3)+1);
+						push @codon_line, $position;
+							if($position==1){
+							$temp1= substr($sequence, ($loc -3), 1);
+							$temp2= substr($sequence, ($loc -2), 1);
+							$temp1=~ tr/ACGTN/TGCAN/;
+							$temp2=~ tr/ACGTN/TGCAN/;
+							push @codon_variant_line, ($base . $temp2 . $temp1);
+						} elsif ($position==2){
+							$temp1= substr($sequence, ($loc), 1);
+							$temp2= substr($sequence, ($loc -2), 1);
+							$temp1=~ tr/ACGTN/TGCAN/;
+							$temp2=~ tr/ACGTN/TGCAN/;
+							push @codon_variant_line, ($temp1 . $base . $temp2);
+						} elsif ($position==3) {
+							$temp1= substr($sequence, ($loc), 1);
+							$temp2= substr($sequence, ($loc + 1), 1);
+							$temp1=~ tr/ACGTN/TGCAN/;
+							$temp2=~ tr/ACGTN/TGCAN/;
+							push @codon_variant_line, ($temp2 . $temp1 . $base);
+						}
 					}
-					$x = $loc - $first;
-					$y = 0;
-					$z = ($second - $first);
-					$position = (($x%3)+1);
-					push @codon, $position;
-					if($position==1){
-						push @codon_variant_1, ($temp_sequence_1 . (substr($sequence, ($loc), 2)));
-						push @codon_variant_2, ($temp_sequence_2 . (substr($sequence, ($loc), 2)));
-					} elsif ($position==2){
-						push @codon_variant_1, ((substr($sequence, ($loc -2), 1)) . $temp_sequence_1 . (substr($sequence, ($loc), 1)));
-						push @codon_variant_2, ((substr($sequence, ($loc -2), 1)) . $temp_sequence_2 . (substr($sequence, ($loc), 1)));
-					} elsif ($position==3){
-						push @codon_variant_1, ((substr($sequence, ($loc -3), 2)) . $temp_sequence_1);
-						push @codon_variant_2, ((substr($sequence, ($loc -3), 2)) . $temp_sequence_2);
-					}
-				} elsif($orientation eq '-') {
-					$temp_sequence_1 = $SNP_variant_1[$counter];
-					$temp_sequence_2 = $SNP_variant_2[$counter];
-					if($position[$counter] eq "R") {
-						$temp_sequence_1 =~ tr/ACGTN/TGCAN/;
-						$temp_sequence_2 =~ tr/ACGTN/TGCAN/;
-					}
-					$temp_sequence_1 =~ tr/ACGTN/TGCAN/;
-					$temp_sequence_2 =~ tr/ACGTN/TGCAN/;
-					$x = $second - $loc;
-					$y = $second - $first;
-					$z = 0;
-					$position = (($x%3)+1);
-					push @codon, $position;
-					if($position==1){
-						$temp1= substr($sequence, ($loc -3), 1);
-						$temp2= substr($sequence, ($loc -2), 1);
-						$temp1=~ tr/ACGTN/TGCAN/;
-						$temp2=~ tr/ACGTN/TGCAN/;
-						push @codon_variant_1, ($temp_sequence_1 . $temp2 . $temp1);
-						push @codon_variant_2, ($temp_sequence_2 . $temp2 . $temp1);
-					} elsif ($position==2){
-						$temp1= substr($sequence, ($loc), 1);
-						$temp2= substr($sequence, ($loc -2), 1);
-						$temp1=~ tr/ACGTN/TGCAN/;
-						$temp2=~ tr/ACGTN/TGCAN/;
-						push @codon_variant_1, ($temp1 . $temp_sequence_1 . $temp2);
-						push @codon_variant_2, ($temp1 . $temp_sequence_2 . $temp2);
-					} elsif ($position==3) {
-						$temp1= substr($sequence, ($loc), 1);
-						$temp2= substr($sequence, ($loc + 1), 1);
-						$temp1=~ tr/ACGTN/TGCAN/;
-						$temp2=~ tr/ACGTN/TGCAN/;
-						push @codon_variant_1, ($temp2 . $temp1 . $temp_sequence_1);
-						push @codon_variant_2, ($temp2 . $temp1 . $temp_sequence_2);
-					}
+      
 				}
-			}
-		}
+			
+			    #Converts the codon sequence into an amino acid
+	
+                foreach(@codon_variant_line) {
+	                $codon_var = $_;
+
+	                $bio_sequence = Bio::Seq->new(-seq => $codon_var, -alphabet =>'dna');
+
+	                $protein_sequence = $bio_sequence->translate;
+		
+	                push @protein_variant, $protein_sequence->seq;
+			
+                }
+		
+
+                #Determines whether the SNP is synonymous or non-synonymous
+		
+                if(scalar(@protein_variant) < 2){
+	                push @SNP_type_line, "Synonymous";
+                } else {
+	                $amino_acid = $protein_variant[0];
+	                $aa_count=0;
+	                for(my $i=0; $i < scalar(@protein_variant); $i++) {
+		                if($protein_variant[$i] eq $amino_acid){
+		                } else {
+			                $aa_count++
+		                }
+	                }
+			
+	                if ($aa_count > 0){
+		                push @SNP_type_line, "Non-synonymous";
+	                } else {
+		                push @SNP_type_line, "Synonymous";
+	                }
+                }
+            }
+    	}
 	}
+	
 	push @count, $protein_counter;
 	
 	if ($protein_counter == 0) {
-		push @codon_variant_1, "NA";
-		push @codon_variant_2, "NA";
+		push @codon_variant, "NA";
 		push @codon, "NA";
-		push @loc_found, "NA";
-		push @DNA_sequences, "NA";
 		push @lines, "NA";
-	}
-	$counter++;
-}
-
-my @protein_variant_1=();
-my @protein_variant_2=();
-
-my @SNP_type=();
-
-my $bio_sequence;
-my $protein_sequence;
-
-#Converts the codon sequence into an amino acid
-
-for(my $i=0; $i < scalar(@codon_variant_1); $i++) {
-
-	if($codon_variant_1[$i] eq 'NA') {
-		push @protein_variant_1, 'NA';
-	} else {
-		$bio_sequence = Bio::Seq->new(-seq => $codon_variant_1[$i], -alphabet =>'dna');
-
-		$protein_sequence = $bio_sequence->translate;
-	
-		push @protein_variant_1, $protein_sequence->seq;
-	
-	}
-
-	if($codon_variant_2[$i] eq 'NA') {
-		push @protein_variant_2, 'NA';
-	} else {
-		$bio_sequence = Bio::Seq->new(-seq => $codon_variant_2[$i], -alphabet =>'dna');
-
-		$protein_sequence = $bio_sequence->translate;
-	
-		push @protein_variant_2, $protein_sequence->seq;
-	
-	}
-}
-
-
-#Determines whether the SNP is synonymous or non-synonymous
-
-for(my $i=0; $i < scalar(@protein_variant_1); $i++) {
-	if($protein_variant_1[$i] eq $protein_variant_2[$i]){
 		push @SNP_type, "Synonymous";
-	} else {
-		push @SNP_type, "Non-synonymous";
+		$intergenic++;
+		$synonymous++;
+	} elsif($protein_counter == 1) {
+		push @codon_variant, $codon_variant_line[0];
+		push @codon, $codon_line[0];
+		push @lines, $lines[0];
+		push @SNP_type, $SNP_type_line[0];
+		if ($SNP_type_line[0] eq 'Non-synonymous'){
+		    $non_synonymous++;
+		} elsif ($SNP_type_line[0] eq 'Synonymous') {
+		    $synonymous++;
+		}
+		$single_gene++;
+	} elsif($protein_counter > 1) {
+		push @codon_variant, "NA";
+		push @codon, "NA";
+		push @lines, "NA";
+		$multiple_gene++;
+		$aa_type = 0;
+		foreach(@SNP_type_line){
+			if($_ eq 'Non-synonymous'){
+				$aa_type++;
+			}
+		}
+		if($aa_type > 0){
+			push @SNP_type, 'Non-synonymous';
+			$non_synonymous++;
+		} else {
+			push @SNP_type, 'Synonymous';
+			$synonymous++;
+		}
 	}
+	
+	$counter++;
+	
+	print ("Analysed " . $counter . " SNPs\n");
 }
+
+
+foreach(@SNP_type_line){
+    print ($_ . "\n");
+}
+
 
 close FILE1;
 
@@ -261,31 +331,41 @@ print OUT "\n";
 print OUT "Gene_count\t";
 print OUT join("\t", @count);
 print OUT "\n";
-#print OUT join("\t", @loc_found);
-#print OUT "\n";
 print OUT "Codon_position\t";
 print OUT join("\t", @codon);
 print OUT "\n";
-print OUT "Codon_variant_1\t";
-print OUT join("\t", @codon_variant_1);
-print OUT "\n";
-print OUT "Codon_variant_2\t";
-print OUT join("\t", @codon_variant_2);
-print OUT "\n";
-print OUT "Protein_variant_1\t";
-print OUT join("\t", @protein_variant_1);
-print OUT "\n";
-print OUT "Protein_variant_2\t";
-print OUT join("\t", @protein_variant_2);
-print OUT "\n";
+#print OUT "Codon_variant\t";
+#print OUT join("\t", @codon_variant);
+#print OUT "\n";
 print OUT "SNP_type\t";
 print OUT join("\t", @SNP_type);
 print OUT "\n";
-#print OUT join("\t", @DNA_sequences);
-#print OUT "\n";
-#print OUT join("\t", @lines);
-#print OUT "\n";
-
-
 
 close OUT;
+
+
+open(OUT2, ">$SNP_summary") or die "Couldn't open OUT $SNP_summary $!\n";
+print OUT2 ("Total number of SNPs analysed: " . scalar(@locations) . "\n\n");
+print OUT2 ("SNP types:\n");
+print OUT2 ("Intergenic\tSingle_genes\tMultiple_genes\tSynonymous\tNon-synonymous\n");
+print OUT2 ($intergenic . "\t" . $single_gene . "\t" .$multiple_gene . "\t" . $synonymous . "\t" . $non_synonymous);
+
+close OUT2;
+
+print ("\nIdentifying the number of SNPs contained in each gene\n");
+
+my @unique_DNA_sequences = uniq(@DNA_sequences);
+my $unique_gene;
+my $gene_SNP_count;
+
+open(OUT3, ">$gene_output") or die "Couldn't open OUT $gene_output $!\n";
+
+print OUT3 ("Number_of_SNPs\tGene_sequence\n");
+
+foreach(@unique_DNA_sequences){
+    $unique_gene = $_;
+    $gene_SNP_count = grep { $_ eq $unique_gene  } @DNA_sequences;
+    print OUT3 ($gene_SNP_count . "\t" . $unique_gene . "\n");
+}
+
+close OUT3;
